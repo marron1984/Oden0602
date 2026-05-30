@@ -1,2 +1,4 @@
 # 生成物（必要に応じて管理）
 # output/ は成果物としてコミットします
+# 中間生成物（scripts/build_scenes.py で再生成可能）
+build/
