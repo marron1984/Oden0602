@@ -1,39 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-build_scenes.py  ―  エディトリアル（雑誌）風のおしゃれなリール用シーンを生成。
+build_scenes.py  ―  エディトリアル風リールの素材を「背景」と「文字」の2レイヤーで生成。
 
 コンセプト「①第1木曜 興味喚起（入口）」:
   季節・世界観 / 空気感・しつらえ / 「気になる」を作る（あえて売らない・保存/印象重視）
 
-デザイン言語（おしゃれ／editorial）:
-  - 生成りペーパーの余白を活かしたミニマル構成
-  - 明朝（Noto Serif CJK JP）の和文 ＋ セリフ体の欧文ミニキャプション
-  - シャープな写真キーライン、N° のインデックス、細いゴールドの罫
-  - くすんだテラコッタを唯一のアクセントに（梅田の赤への目配せ）
+ねらい（今回の強化）:
+  - 文字を大きく・太く・くっきり（見やすさ／アピール感アップ）
+  - 文字は別レイヤーにして、make_reel.sh 側でスライド＋フェード表示（動画っぽさ）
 
-出力: build/scene_00.png …（make_reel.sh から使用）
+出力:
+  build/bg_XX.png : 背景（ペーパー＋ヘッダー/フッター＋写真＋キーライン）… 不透明
+  build/tx_XX.png : 文字（N°・罫・和文・欧文）… 透明PNG（アニメ用）
 """
 
 import os
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # ---- フォント ----
-JP_SERIF      = ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", 0)
-JP_SERIF_B    = ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc", 0)
-LAT_SERIF     = ("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", 0)
-LAT_SERIF_I   = ("/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf", 0)
+JP_SERIF    = ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", 0)
+JP_SERIF_B  = ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc", 0)
+JP_SANS_B   = ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 0)
+LAT_SERIF   = ("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", 0)
+LAT_SERIF_I = ("/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf", 0)
 
-# ---- カラー（くすんだ上品なトーン）----
+# ---- カラー ----
 PAPER  = (244, 240, 233)
-INK    = (38, 35, 31)
-ACCENT = (166, 74, 58)    # くすんだテラコッタ
-GOLD   = (183, 156, 106)  # 細い罫のゴールド
-GRAY   = (138, 130, 118)
-WHITE  = (255, 255, 255)
+INK    = (33, 30, 27)
+ACCENT = (176, 64, 48)    # 引き締めたテラコッタレッド（アピール）
+GOLD   = (183, 156, 106)
+GRAY   = (120, 112, 101)
 
 W, H = 1080, 1920
-M = 96  # 左右マージン
+M = 96
 
 HEAD_L = "UMEDA, OSAKA"
 HEAD_R = "EST FOODHALL"
@@ -52,13 +52,14 @@ SCENES = [
     (None,            "梅田で、ひとやすみ。",    "Take a pause in Umeda."),
 ]
 
+CAP_TOP = 1408   # 写真下キャプションの基準Y
+
 
 def font(spec, size):
-    path, idx = spec
-    return ImageFont.truetype(path, size, index=idx)
+    return ImageFont.truetype(spec[0], size, index=spec[1])
 
 
-def text_size(d, s, f):
+def tsize(d, s, f):
     b = d.textbbox((0, 0), s, font=f)
     return b[2] - b[0], b[3] - b[1], b
 
@@ -70,7 +71,6 @@ def tracked_width(d, s, f, tr):
 
 
 def draw_tracked(d, x, y, s, f, fill, tr=0):
-    """字間 tr を空けて左から描く（ベースラインは共通／y は文字の上端）。"""
     cx = x
     for ch in s:
         d.text((cx, y), ch, font=f, fill=fill)
@@ -78,29 +78,37 @@ def draw_tracked(d, x, y, s, f, fill, tr=0):
 
 
 def draw_tracked_center(d, cx, y, s, f, fill, tr=0):
-    w = tracked_width(d, s, f, tr)
-    draw_tracked(d, cx - w / 2, y, s, f, fill, tr)
+    draw_tracked(d, cx - tracked_width(d, s, f, tr) / 2, y, s, f, fill, tr)
 
 
 def centered(d, cx, y, s, f, fill):
-    w, _, b = text_size(d, s, f)
+    w, _, b = tsize(d, s, f)
     d.text((cx - w / 2 - b[0], y - b[1]), s, font=f, fill=fill)
 
 
-def paper(img, d):
+def fit_font(d, s, spec, start, maxw, minsize=52):
+    """maxw に収まる最大サイズの太字フォントを返す。"""
+    size = start
+    while size > minsize:
+        f = font(spec, size)
+        if tracked_width(d, s, f, 2) <= maxw:
+            return f
+        size -= 2
+    return font(spec, minsize)
+
+
+# ---------- 背景レイヤー ----------
+def paper(img):
+    d = ImageDraw.Draw(img)
     d.rectangle([0, 0, W, H], fill=PAPER)
-    # ごく薄いビネット（四隅をわずかに沈める）
     v = Image.new("L", (W, H), 0)
-    vd = ImageDraw.Draw(v)
-    vd.ellipse([-W * 0.25, -H * 0.18, W * 1.25, H * 1.18], fill=255)
+    ImageDraw.Draw(v).ellipse([-W * 0.25, -H * 0.18, W * 1.25, H * 1.18], fill=255)
     v = v.filter(ImageFilter.GaussianBlur(160))
-    dark = Image.new("RGBA", (W, H), (20, 16, 12, 26))
-    inv = Image.eval(v, lambda p: 255 - p)
-    img.paste(dark, (0, 0), inv)
+    img.paste(Image.new("RGBA", (W, H), (18, 14, 10, 30)), (0, 0),
+              Image.eval(v, lambda p: 255 - p))
 
 
-def header_footer(d, idx, total):
-    # 上：細い罫＋左右のラベル
+def header_footer(d):
     ry = 158
     d.line([(M, ry), (W - M, ry)], fill=INK, width=2)
     fl = font(LAT_SERIF, 30)
@@ -108,7 +116,6 @@ def header_footer(d, idx, total):
     wr = tracked_width(d, HEAD_R, fl, 6)
     draw_tracked(d, W - M - wr, ry - 44, HEAD_R, fl, INK, tr=6)
 
-    # 下：細い罫＋署名
     fy = 1792
     d.line([(M, fy), (W - M, fy)], fill=INK, width=2)
     cx = W / 2
@@ -116,90 +123,72 @@ def header_footer(d, idx, total):
     draw_tracked_center(d, cx, fy + 78, SIGN_EN, font(LAT_SERIF, 24), GRAY, tr=10)
 
 
-def index_label(n):
-    return f"N° {n:02d}"
-
-
-def caption_block(d, x, y, idx, jp, en):
-    # N° インデックス（テラコッタ）＋ゴールドの短い罫
-    draw_tracked(d, x, y, index_label(idx + 1), font(LAT_SERIF, 34), ACCENT, tr=8)
-    d.line([(x, y + 54), (x + 64, y + 54)], fill=GOLD, width=2)
-    # 和文（明朝）
-    jf = font(JP_SERIF, 66)
-    draw_tracked(d, x, y + 92, jp, jf, INK, tr=3)
-    # 欧文（セリフ・イタリック）
-    ef = font(LAT_SERIF_I, 36)
-    _, _, b = text_size(d, en, ef)
-    d.text((x - b[0], y + 196 - b[1]), en, font=ef, fill=GRAY)
-
-
-def crop_to(photo_path, pw, ph):
-    im = Image.open(photo_path).convert("RGB")
-    sr = im.width / im.height
-    dr = pw / ph
+def crop_to(path, pw, ph):
+    im = Image.open(path).convert("RGB")
+    sr, dr = im.width / im.height, pw / ph
     if sr > dr:
-        nh = ph; nw = int(nh * sr)
+        nh, nw = ph, int(ph * sr)
     else:
-        nw = pw; nh = int(nw / sr)
+        nw, nh = pw, int(pw / sr)
     im = im.resize((nw, nh), Image.LANCZOS)
-    l = (nw - pw) // 2; t = (nh - ph) // 2
+    l, t = (nw - pw) // 2, (nh - ph) // 2
     return im.crop((l, t, l + pw, t + ph))
 
 
-def make_photo_scene(idx, total, photo, jp, en):
+def make_bg(i, photo):
     img = Image.new("RGBA", (W, H), PAPER + (255,))
+    paper(img)
     d = ImageDraw.Draw(img)
-    paper(img, d)
+    if photo is not None:
+        pw, ph = W - 2 * M, int((W - 2 * M) * 5 / 4)
+        x0, y0 = M, 250
+        x1, y1 = x0 + pw, y0 + ph
+        sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(sh).rectangle([x0, y0 + 16, x1, y1 + 22], fill=(30, 22, 16, 80))
+        img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(26)))
+        img.paste(crop_to(photo, pw, ph), (x0, y0))
+        ImageDraw.Draw(img).rectangle([x0, y0, x1 - 1, y1 - 1], outline=INK, width=2)
+    header_footer(ImageDraw.Draw(img))
+    img.convert("RGB").save(f"build/bg_{i:02d}.png")
+
+
+# ---------- 文字レイヤー（透明） ----------
+def make_tx(i, photo, jp, en):
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
+    idx = f"N° {i + 1:02d}"
 
-    # 写真（4:5・シャープな角）
-    pw = W - 2 * M           # 888
-    ph = int(pw * 5 / 4)     # 1110
-    x0, y0 = M, 250
-    x1, y1 = x0 + pw, y0 + ph
+    if photo is not None:
+        x = M
+        y = CAP_TOP
+        # N°（アクセント）＋ゴールド罫
+        draw_tracked(d, x, y, idx, font(LAT_SERIF, 36), ACCENT, tr=8)
+        d.line([(x, y + 56), (x + 70, y + 56)], fill=GOLD, width=3)
+        # 和文（太・大きく見やすく）
+        jf = fit_font(d, jp, JP_SERIF_B, 92, W - 2 * M)
+        draw_tracked(d, x, y + 96, jp, jf, INK, tr=2)
+        # 欧文
+        ef = font(LAT_SERIF_I, 40)
+        _, _, b = tsize(d, en, ef)
+        d.text((x - b[0], y + 232 - b[1]), en, font=ef, fill=GRAY)
+    else:
+        cx = W / 2
+        draw_tracked_center(d, cx, 720, idx, font(LAT_SERIF, 38), ACCENT, tr=8)
+        d.line([(cx - 44, 786), (cx + 44, 786)], fill=GOLD, width=3)
+        jf = fit_font(d, jp, JP_SERIF_B, 104, W - 2 * M)
+        centered(d, cx, 850, jp, jf, INK)
+        centered(d, cx, 1018, en, font(LAT_SERIF_I, 44), GRAY)
+        centered(d, cx, 1126, "また、ふらっと。", font(JP_SERIF, 42), GRAY)
 
-    # やわらかい影
-    sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ImageDraw.Draw(sh).rectangle([x0, y0 + 16, x1, y1 + 22], fill=(30, 22, 16, 70))
-    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(24)))
-
-    img.paste(crop_to(photo, pw, ph), (x0, y0))
-    d = ImageDraw.Draw(img)
-    d.rectangle([x0, y0, x1 - 1, y1 - 1], outline=INK, width=2)   # キーライン
-
-    caption_block(d, M, y1 + 56, idx, jp, en)
-    header_footer(d, idx, total)
-    return img.convert("RGB")
-
-
-def make_closing_scene(idx, total, jp, en):
-    img = Image.new("RGBA", (W, H), PAPER + (255,))
-    d = ImageDraw.Draw(img)
-    paper(img, d)
-    d = ImageDraw.Draw(img)
-    cx = W / 2
-
-    draw_tracked_center(d, cx, 760, index_label(idx + 1), font(LAT_SERIF, 34), ACCENT, tr=8)
-    d.line([(cx - 40, 824), (cx + 40, 824)], fill=GOLD, width=2)
-    centered(d, cx, 880, jp, font(JP_SERIF, 84), INK)
-    centered(d, cx, 1030, en, font(LAT_SERIF_I, 40), GRAY)
-    centered(d, cx, 1130, "また、ふらっと。", font(JP_SERIF, 40), GRAY)
-
-    header_footer(d, idx, total)
-    return img.convert("RGB")
+    img.save(f"build/tx_{i:02d}.png")
 
 
 def main():
     os.makedirs("build", exist_ok=True)
-    total = len(SCENES)
     for i, (photo, jp, en) in enumerate(SCENES):
-        if photo is None:
-            scene = make_closing_scene(i, total, jp, en)
-        else:
-            scene = make_photo_scene(i, total, photo, jp, en)
-        out = f"build/scene_{i:02d}.png"
-        scene.save(out)
-        print("saved", out)
+        make_bg(i, photo)
+        make_tx(i, photo, jp, en)
+        print(f"saved build/bg_{i:02d}.png  build/tx_{i:02d}.png")
 
 
 if __name__ == "__main__":
