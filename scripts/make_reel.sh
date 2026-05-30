@@ -48,7 +48,7 @@ for i in "${!SCENES[@]}"; do
   INPUTS+=(-i "${SCENES[$i]}")
   # 1.25倍に拡大して余白を確保 → ゆるく寄るズーム（中央基準）→ 1080x1920 / 30fps へ
   PREP+="[${i}:v]scale=1350:2400,"
-  PREP+="zoompan=z='min(zoom+0.0005,1.06)':d=${FRAMES}:"
+  PREP+="zoompan=z='min(zoom+0.00035,1.045)':d=${FRAMES}:"
   PREP+="x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${FPS},"
   PREP+="setsar=1,format=yuv420p[v${i}];"
 done
