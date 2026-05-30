@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# make_reel.sh ―  昭和レトロPOP のリールを生成。
+# make_reel.sh ―  写真フルブリード主役のシネマティック・リールを生成。
 #
 # 動き:
-#   - 背景：ゆるいズーム（Ken Burns）
-#   - 文字＆バッジ：各シーン頭でスライドアップ＋フェードイン
-#   - シーン切替：スライド/ワイプ系を交互に使ってリズミカルに
-#   - 画面下：時間で伸びるからし色プログレスバー（紺地の上）
+#   - 背景写真：ゆるいズーム（Ken Burns）で没入感
+#   - 文字：各シーン頭でやわらかくフェードイン＋わずかに上へ
+#   - シーン切替：ディゾルブ（fade）で上品に
+#   - 画面上部：時間で伸びる細い金のプログレスバー
 #
-# 仕様: output/final.mp4 / 1080x1920 / 3秒+1秒トランジション / 30fps
+# 仕様: output/final.mp4 / 1080x1920 / 3秒+1秒ディゾルブ / 30fps
 #       H.264 (libx264) / yuv420p / 音声なし
 #
 set -euo pipefail
@@ -18,11 +18,8 @@ cd "$(cd "$SCRIPT_DIR/.." && pwd)"
 W=1080; H=1920; FPS=30
 DISPLAY=3; FADE=1
 CLIP=$((DISPLAY + FADE)); FRAMES=$((CLIP * FPS))
-INTRO=0.5; RISE=34
+INTRO=0.7; RISE=22
 OUT="output/final.mp4"
-
-# レトロにリズムを出すトランジション（順に使用）
-TRANS=(slideleft slideup slideright wipeup slideleft slideup slideright)
 
 if ! ls build/bg_*.png >/dev/null 2>&1; then python3 scripts/build_scenes.py; fi
 mapfile -t BGS < <(ls -1 build/bg_*.png | sort)
@@ -40,25 +37,30 @@ done
 PREP=""
 for ((i=0; i<N; i++)); do
   bg=$((i*2)); tx=$((i*2+1))
-  PREP+="[${bg}:v]scale=1350:2400,zoompan=z='min(zoom+0.00045,1.06)':d=${FRAMES}:"
+  # 背景：1.25倍→ゆるくズーム（方向を交互に：寄る/引く風の演出）
+  if (( i % 2 == 0 )); then
+    Z="z='min(zoom+0.00035,1.05)'"
+  else
+    Z="z='if(eq(on,0),1.05,max(1.0,zoom-0.00035))'"
+  fi
+  PREP+="[${bg}:v]scale=1350:2400,zoompan=${Z}:d=${FRAMES}:"
   PREP+="x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${FPS},setsar=1[bg${i}];"
   PREP+="[${tx}:v]format=rgba,fps=${FPS},setsar=1,fade=t=in:st=0:d=${INTRO}:alpha=1[tx${i}];"
-  PREP+="[bg${i}][tx${i}]overlay=x=0:y='${RISE}*(1-min(t/${INTRO}\,1))':format=auto,"
+  PREP+="[bg${i}][tx${i}]overlay=x=0:y='-${RISE}*(1-min(t/${INTRO}\,1))':format=auto,"
   PREP+="format=yuv420p,setsar=1[v${i}];"
 done
 
 CHAIN=""; PREV="[v0]"
 for ((i=1; i<N; i++)); do
   OFF=$(( DISPLAY * i ))
-  TR=${TRANS[$(((i-1) % ${#TRANS[@]}))]}
   LBL="[x${i}]"; [[ "$i" -eq $((N-1)) ]] && LBL="[xf]"
-  CHAIN+="${PREV}[v${i}]xfade=transition=${TR}:duration=${FADE}:offset=${OFF}${LBL};"
+  CHAIN+="${PREV}[v${i}]xfade=transition=fade:duration=${FADE}:offset=${OFF}${LBL};"
   PREV="$LBL"
 done
 
-# プログレスバー（紺地の上にからし色が伸びる）
-BAR="[xf]drawbox=x=0:y=${H}-12:w=iw:h=12:color=0x213152@1.0:t=fill,"
-BAR+="drawbox=x=0:y=${H}-12:w='iw*min(t/${TOTAL}\,1)':h=12:color=0xE7B036@1.0:t=fill[outv]"
+# プログレスバー（上部・細い金）
+BAR="[xf]drawbox=x=0:y=0:w=iw:h=5:color=white@0.28:t=fill,"
+BAR+="drawbox=x=0:y=0:w='iw*min(t/${TOTAL}\,1)':h=5:color=0xD4B878@1.0:t=fill[outv]"
 
 FILTER="${PREP}${CHAIN}${BAR}"
 

@@ -1,55 +1,47 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-build_scenes.py  ―  昭和レトロPOP スタイルのリール素材を生成（背景＋文字の2レイヤー）。
+build_scenes.py  ―  写真フルブリード（全画面）主役のシネマティック構成。
 
 コンセプト「①第1木曜 興味喚起（入口）」:
   季節・世界観 / 空気感 / 「気になる」を作る（あえて売らない・保存/印象重視）
 
-スタイル（昭和レトロPOP）:
-  - クリーム地＋ハーフトーンのドット
-  - 上＝赤帯／下＝紺帯、斜めのポラロイド写真
-  - 極太ラウンド見出し（白文字＋紺フチ）で楽しくキャッチー
-  - からし色のスタンプ・バッジ
+構図:
+  - 写真を画面いっぱい（1080x1920）に使い、軽くグレーディング
+  - 下部に黒のグラデーション（スクリム）で文字を読みやすく
+  - 文字は最小限：小さな欧文キッカー＋細い金罫＋短い和文一行
+  - 没入感を主役に、文字は控えめ
 
 出力:
-  build/bg_XX.png : 背景（帯・ハーフトーン・ポラ写真・署名）… 不透明
-  build/tx_XX.png : 文字（見出し・欧文・バッジ）… 透明PNG（アニメ用）
+  build/bg_XX.png : 全画面写真＋グレーディング＋下スクリム … 不透明
+  build/tx_XX.png : 上ラベル＋下キャプション … 透明PNG（アニメ用）
 """
 
 import os
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 
-NS_B    = ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 0)
-SERIF   = ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", 0)
-LAT_B   = ("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 0)
-LAT     = ("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf", 0)
+NS_B  = ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 0)
+NS_M  = ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0)
+LAT   = ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 0)
 
-# ---- レトロPOP カラー ----
-CREAM = (245, 233, 206)
-DOT   = (233, 215, 176)
-RED   = (202, 54, 47)
-NAVY  = (33, 49, 82)
-MUST  = (231, 176, 54)
-WHITE = (252, 248, 240)
+INK_W  = (250, 248, 244)
+GOLD   = (212, 184, 120)
+SOFT   = (228, 224, 216)
 
 W, H = 1080, 1920
-TOPBAND = 132
-BOTBAND = 150
 
-HEAD = "梅 田 名 物 さ ん ぽ"
-SIGN = "おでん × スタンド  三徳六味 ／ 梅田 EST FOODHALL"
+HEAD_L = "UMEDA, OSAKA"
+HEAD_R = "EST FOODHALL"
 
-# (写真, 見出し, 欧文, バッジ語)  None は文字のみクロージング
+# (写真, 欧文キッカー, 和文, クロージング?)
 SCENES = [
-    ("IMG_0760修.jpg", "初夏の、さんぽ日和。",     "STROLL",  "初夏"),
-    ("IMG_0724修.jpg", "おなじみ、あの赤。",        "UMEDA",   "名物"),
-    ("IMG_0729修.jpg", "目印は、これ！",            "LANDMARK","目印"),
-    ("IMG_0738修.jpg", "EST FOODHALL、とうちゃく。", "ARRIVED", "到着"),
-    ("IMG_0769修.jpg", "電球サイン、ピカピカ。",     "LIGHTS",  "灯り"),
-    ("IMG_0747修.jpg", "ちいさな、おでんスタンド。", "ODEN",    "発見"),
-    ("IMG_0772修.jpg", "おでん、いっちょ。",         "STAND",   "湯気"),
-    (None,            "梅田で、ひとやすみ。",       "PAUSE",   "また"),
+    ("IMG_0760修.jpg", "SUMMER",    "初夏の、寄り道。",            False),
+    ("IMG_0724修.jpg", "LANDMARK",  "梅田の、目印。",              False),
+    ("IMG_0729修.jpg", "THE RED",   "あの赤に、会いに。",          False),
+    ("IMG_0738修.jpg", "ARRIVE",    "EST FOODHALL へ。",          False),
+    ("IMG_0769修.jpg", "LIGHTS",    "灯りに、誘われて。",          False),
+    ("IMG_0747修.jpg", "THE STAND", "ちいさな、おでんスタンド。",  False),
+    ("IMG_0772修.jpg", "INSIDE",    "湯気の、向こうへ。",          True),
 ]
 
 
@@ -63,21 +55,17 @@ def tw(d, s, f, tr=0):
     return sum(f.getlength(c) for c in s) + tr * (len(s) - 1)
 
 
-def tracked(d, x, y, s, f, fill, tr=0, stroke=0, sfill=None):
+def tracked(d, x, y, s, f, fill, tr=0):
     cx = x
     for c in s:
-        d.text((cx, y), c, font=f, fill=fill, stroke_width=stroke, stroke_fill=sfill)
+        d.text((cx, y), c, font=f, fill=fill)
         cx += f.getlength(c) + tr
-
-
-def tracked_c(d, cx, y, s, f, fill, tr=0, stroke=0, sfill=None):
-    tracked(d, cx - tw(d, s, f, tr) / 2, y, s, f, fill, tr, stroke, sfill)
 
 
 def fit(d, s, spec, start, maxw, mn=46):
     sz = start
     while sz > mn:
-        if tw(d, s, font(spec, sz), 2) <= maxw:
+        if tw(d, s, font(spec, sz), 1) <= maxw:
             return font(spec, sz)
         sz -= 2
     return font(spec, mn)
@@ -95,101 +83,74 @@ def cover(path, w, h):
     return im.crop((l, t, l + w, t + h))
 
 
-def halftone(d):
-    step = 30
-    for j, yy in enumerate(range(10, H, step)):
-        for i, xx in enumerate(range(10, W, step)):
-            r = 4 if (i + j) % 2 == 0 else 2
-            d.ellipse([xx - r, yy - r, xx + r, yy + r], fill=DOT)
-
-
-def polaroid(photo, angle):
-    pw, ph = 720, 812
-    border, bottom = 26, 70
-    fw, fh = pw + border * 2, ph + border + bottom
-    card = Image.new("RGBA", (fw, fh), WHITE + (255,))
-    ImageDraw.Draw(card).rectangle([0, 0, fw - 1, fh - 1], outline=NAVY, width=5)
-    card.paste(cover(photo, pw, ph), (border, border))
-    ImageDraw.Draw(card).rectangle(
-        [border, border, border + pw - 1, border + ph - 1], outline=NAVY, width=4)
-    # 影付きで回転
-    sh = Image.new("RGBA", (fw + 60, fh + 60), (0, 0, 0, 0))
-    ImageDraw.Draw(sh).rectangle([30, 36, 30 + fw, 36 + fh], fill=(30, 22, 16, 90))
-    sh = sh.filter(ImageFilter.GaussianBlur(16))
-    base = Image.new("RGBA", (fw + 60, fh + 60), (0, 0, 0, 0))
-    base.alpha_composite(sh)
-    base.alpha_composite(card, (30, 24))
-    return base.rotate(angle, expand=True, resample=Image.BICUBIC)
-
-
-def bands_sign(img):
-    d = ImageDraw.Draw(img)
-    d.rectangle([0, 0, W, TOPBAND], fill=RED)
-    d.rectangle([0, H - BOTBAND, W, H], fill=NAVY)
-    tracked_c(d, W / 2, 40, HEAD, font(NS_B, 46), CREAM, tr=6)
-    # 上帯のひし形アクセント（フォント非依存で描画）
-    for sx in (110, W - 110):
-        cy = TOPBAND / 2
-        d.polygon([(sx, cy - 16), (sx + 14, cy), (sx, cy + 16), (sx - 14, cy)], fill=MUST)
-    tracked_c(d, W / 2, H - BOTBAND + 52, SIGN, font(NS_B, 28), CREAM, tr=2)
+def grade(im):
+    im = ImageEnhance.Contrast(im).enhance(1.06)
+    im = ImageEnhance.Color(im).enhance(1.10)
+    im = ImageEnhance.Brightness(im).enhance(0.99)
+    # ほんのり暖色
+    warm = Image.new("RGB", im.size, (255, 226, 188))
+    im = Image.blend(im, warm, 0.05)
+    return im
 
 
 def make_bg(i, photo):
-    img = Image.new("RGBA", (W, H), CREAM + (255,))
-    halftone(ImageDraw.Draw(img))
-    if photo is not None:
-        angle = 5 if i % 2 == 0 else -5
-        pol = polaroid(photo, angle)
-        img.alpha_composite(pol, (int(W / 2 - pol.width / 2), 250))
-    bands_sign(img)
-    img.convert("RGB").save(f"build/bg_{i:02d}.png")
+    im = grade(cover(photo, W, H)).convert("RGBA")
+
+    # 周辺減光（ビネット）
+    v = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(v).ellipse([-W * 0.30, -H * 0.20, W * 1.30, H * 1.20], fill=255)
+    v = v.filter(ImageFilter.GaussianBlur(200))
+    im.paste(Image.new("RGBA", (W, H), (0, 0, 0, 90)), (0, 0),
+             Image.eval(v, lambda p: 255 - p))
+
+    # 下スクリム（透明→黒）と 上の軽いスクリム
+    grad = Image.new("L", (1, H), 0)
+    for y in range(H):
+        if y > H * 0.52:
+            grad.putpixel((0, y), int(225 * ((y - H * 0.52) / (H * 0.48)) ** 1.3))
+        elif y < H * 0.12:
+            grad.putpixel((0, y), int(90 * (1 - y / (H * 0.12))))
+    im.paste(Image.new("RGBA", (W, H), (8, 8, 12, 255)), (0, 0), grad.resize((W, H)))
+
+    im.convert("RGB").save(f"build/bg_{i:02d}.png")
 
 
-def badge(layer, cx, cy, word):
-    d = ImageDraw.Draw(layer)
-    r = 96
-    # スタンプ風：からし円＋紺の点線リング
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=MUST)
-    import math
-    for k in range(40):
-        a = 2 * math.pi * k / 40
-        x = cx + (r + 10) * math.cos(a)
-        y = cy + (r + 10) * math.sin(a)
-        d.ellipse([x - 3, y - 3, x + 3, y + 3], fill=NAVY)
-    f = fit(d, word, NS_B, 64, r * 1.6)
-    w = tw(d, word, f)
-    d.text((cx - w / 2, cy - f.size / 2 - 6), word, font=f, fill=NAVY)
-
-
-def make_tx(i, photo, head, en, badge_word):
+def make_tx(i, kicker, jp, closing):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    if photo is not None:
-        # 見出し（白＋紺フチ・極太）
-        hf = fit(d, head, NS_B, 86, W - 150)
-        tracked_c(d, W / 2, 1280, head, hf, WHITE, tr=1, stroke=10, sfill=NAVY)
-        # からしの下線
-        uw = min(tw(d, head, hf, 1), W - 200)
-        d.line([(W / 2 - uw / 2, 1410), (W / 2 + uw / 2, 1410)], fill=MUST, width=10)
-        # 欧文
-        tracked_c(d, W / 2, 1452, en, font(LAT_B, 40), NAVY, tr=14)
-        # バッジ（右上）
-        badge(img, W - 150, 360, badge_word)
-    else:
-        hf = fit(d, head, NS_B, 100, W - 150)
-        tracked_c(d, W / 2, 820, head, hf, WHITE, tr=1, stroke=12, sfill=NAVY)
-        uw = min(tw(d, head, hf, 1), W - 200)
-        d.line([(W / 2 - uw / 2, 980), (W / 2 + uw / 2, 980)], fill=MUST, width=12)
-        tracked_c(d, W / 2, 1030, "また、ふらっと。", font(NS_B, 46), NAVY, tr=4)
-        badge(img, W / 2, 600, "梅田")
+
+    # 上：左右の小ラベル
+    fl = font(LAT, 28)
+    tracked(d, 84, 70, HEAD_L, fl, SOFT + (210,), tr=6)
+    tracked(d, W - 84 - tw(d, HEAD_R, fl, 6), 70, HEAD_R, fl, SOFT + (210,), tr=6)
+
+    # 下：キャプション（左寄せ）
+    x = 84
+    ky = 1486
+    idx = f"N° {i + 1:02d}"
+    label = f"{idx}    {kicker}"
+    tracked(d, x, ky, label, font(LAT, 32), GOLD + (255,), tr=6)
+    d.line([(x, ky + 52), (x + 76, ky + 52)], fill=GOLD + (255,), width=3)
+
+    jf = fit(d, jp, NS_B, 78, W - 168)
+    # 影 → 本文
+    sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    tracked(ImageDraw.Draw(sh), x + 3, ky + 95, jp, jf, (0, 0, 0, 170), tr=1)
+    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(6)))
+    d = ImageDraw.Draw(img)
+    tracked(d, x, ky + 92, jp, jf, INK_W + (255,), tr=1)
+
+    if closing:
+        tracked(d, x, ky + 200, "また、ふらっと。", font(NS_M, 40), SOFT + (235,), tr=2)
+
     img.save(f"build/tx_{i:02d}.png")
 
 
 def main():
     os.makedirs("build", exist_ok=True)
-    for i, (photo, head, en, bw) in enumerate(SCENES):
+    for i, (photo, kicker, jp, closing) in enumerate(SCENES):
         make_bg(i, photo)
-        make_tx(i, photo, head, en, bw)
+        make_tx(i, kicker, jp, closing)
         print(f"saved build/bg_{i:02d}.png  build/tx_{i:02d}.png")
 
 
