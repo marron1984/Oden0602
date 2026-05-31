@@ -34,17 +34,17 @@ def main():
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
 
-    tracked_c(d, W / 2, 150, "UMEDA, OSAKA", font(LAT, 30), GRAY, tr=6)
-    tracked_c(d, W / 2, 208, "おでん × スタンド  三徳六味", font(NS_B, 44), INK, tr=2)
-    d.line([(W / 2 - 60, 288), (W / 2 + 60, 288)], fill=GOLD, width=4)
+    tracked_c(d, W / 2, 168, "UMEDA, OSAKA", font(LAT, 30), GRAY, tr=6)
+    tracked_c(d, W / 2, 226, "おでん × スタンド  三徳六味", font(NS_B, 44), INK, tr=2)
+    d.line([(W / 2 - 60, 306), (W / 2 + 60, 306)], fill=GOLD, width=4)
 
-    # QR（大きく・スキャンしやすく）
+    # QR（画像が文言入りのため大きく見せる・スキャンしやすく）
     qr = Image.open(QR).convert("RGB")
-    target_w = 720
+    target_w = 860
     qh = int(target_w * qr.height / qr.width)
     qr = qr.resize((target_w, qh), Image.LANCZOS)
-    qx, qy = (W - target_w) // 2, 360
-    pad = 34
+    qx, qy = (W - target_w) // 2, 400
+    pad = 30
     # 影
     base = img.convert("RGBA")
     sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -58,9 +58,6 @@ def main():
                         radius=36, outline=(232, 232, 232), width=2, fill=(255, 255, 255))
     img.paste(qr, (qx, qy))
 
-    cy = qy + qh + pad + 80
-    tracked_c(d, W / 2, cy, "スマホで読み取ってね", font(NS_B, 50), INK, tr=2)
-    tracked_c(d, W / 2, cy + 82, "メニュー ・ SNS はこちら", font(NS_B, 36), GRAY, tr=2)
     tracked_c(d, W / 2, H - 150, "また、ふらっと。", font(NS_B, 40), GRAY, tr=2)
 
     img.save("build/endcard.png")
