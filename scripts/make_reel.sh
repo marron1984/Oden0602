@@ -19,7 +19,7 @@ W=1080; H=1920; FPS=30
 DISPLAY=3; FADE=1
 CLIP=$((DISPLAY + FADE)); FRAMES=$((CLIP * FPS))
 INTRO=0.7; RISE=22
-OUT="output/final.mp4"
+OUT="output/final_silent.mp4"   # BGMは scripts/add_bgm.sh で付与
 
 if ! ls build/bg_*.png >/dev/null 2>&1; then python3 scripts/build_scenes.py; fi
 mapfile -t BGS < <(ls -1 build/bg_*.png | sort)
