@@ -38,9 +38,9 @@ SCENES = [
     ("IMG_0760修.jpg", "SUMMER",    "初夏の、寄り道。",            False),
     ("IMG_0724修.jpg", "LANDMARK",  "梅田の、目印。",              False),
     ("IMG_0729修.jpg", "THE RED",   "あの赤に、会いに。",          False),
-    ("IMG_0738修.jpg", "ARRIVE",    "EST FOODHALL へ。",          False),
+    ("IMG_0738修.jpg", "ARRIVE",    "お目当ては、この中に。",      False),
     ("IMG_0769修.jpg", "LIGHTS",    "灯りに、誘われて。",          False),
-    ("IMG_0747修.jpg", "THE STAND", "ちいさな、おでんスタンド。",  False),
+    ("IMG_0747修.jpg", "THE STAND", "ふらりと、おでんスタンド。",  False),
     ("IMG_0772修.jpg", "INSIDE",    "湯気の、向こうへ。",          True),
 ]
 
